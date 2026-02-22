@@ -44,7 +44,7 @@ The absolute fastest way to get Hardin running is to use the included installati
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/yourusername/hardin-pilot.git
+git clone https://github.com/0xMesh-X/hardin-pilot.git
 cd hardin-pilot
 
 # 2. Run the automated install script
@@ -60,7 +60,7 @@ If you prefer to manage the virtual environment yourself:
 
 ```bash
 # 1. Clone and enter directory
-git clone https://github.com/yourusername/hardin-pilot.git
+git clone https://github.com/0xMesh-X/hardin-pilot.git
 cd hardin-pilot
 
 # 2. Setup your virtual environment
