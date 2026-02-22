@@ -158,6 +158,7 @@ def _run_scan(extra_paths: list[str] | None = None, resume: bool = True) -> None
         console=console,
     ) as progress:
         task = progress.add_task("Analyzing services...", total=len(services))
+        scan_completed = True
 
         for svc in services:
             if is_service_completed(state, svc.service_name):
@@ -181,6 +182,7 @@ def _run_scan(extra_paths: list[str] | None = None, resume: bool = True) -> None
             except APIRateLimitError as e:
                 console.print(f"  [yellow]⚠ Rate limited on {svc.service_name}. State saved. Re-run to resume.[/yellow]")
                 save_state(state)
+                scan_completed = False
                 break
             except AnalyzerError as e:
                 console.print(f"  [red]✗ {svc.service_name}: {e}[/red]")
@@ -230,12 +232,16 @@ def _run_scan(extra_paths: list[str] | None = None, resume: bool = True) -> None
             border_style="red",
             padding=(1, 2),
         ))
-    else:
+    elif scan_completed:
+        # Only print the success message if we actually finished scanning everything
         console.print("\n[green bold]No remediation needed. Your system looks secure! 🎉[/green bold]")
 
-    state.is_complete = True
-    save_state(state)
-    clear_state()
+    if scan_completed:
+        state.is_complete = True
+        save_state(state)
+        clear_state()
+    else:
+        console.print("\n[dim]Scan paused. Run 'hardin' again later to resume remaining services.[/dim]")
 
 
 def _list_services() -> None:
