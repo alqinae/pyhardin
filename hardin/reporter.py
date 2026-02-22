@@ -1,6 +1,7 @@
 import shutil
 from datetime import datetime
 from pathlib import Path
+import os
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -209,7 +210,21 @@ def build_remediation_script(results: list[AnalysisResult]) -> str:
             all_commands.extend(result.remediation_commands)
     if not all_commands:
         return ""
-    return " && \\\n".join(all_commands)
+    full_script = " && \\\n".join(all_commands)
+    
+    # Save the script to a constant location for later use
+    script_path = get_output_dir().parent / ".hardin" / "last_remediation.sh"
+    try:
+        script_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(script_path, "w") as f:
+            f.write("#!/bin/bash\nset -e\n\n" + full_script + "\n")
+        # Ensure it's executable and only readable by the owner
+        os.chmod(script_path, 0o700)
+    except Exception as e:
+        # We don't want to crash the whole run just because we couldn't save the convenience script
+        pass
+        
+    return full_script
 
 
 def _escape(text: str) -> str:
