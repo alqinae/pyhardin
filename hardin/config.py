@@ -14,13 +14,21 @@ DEFAULT_CONFIG = {
     "output_dir": str(Path.home() / "hardin_reports"),
 }
 
-
 def ensure_config_dir() -> None:
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     CONFIG_FILE.touch(exist_ok=True)
     if CONFIG_FILE.stat().st_size == 0:
         with open(CONFIG_FILE, "w") as f:
             json.dump(DEFAULT_CONFIG.copy(), f, indent=2)
+
+
+def reset_config() -> None:
+    if CONFIG_FILE.exists():
+        CONFIG_FILE.unlink()
+    # Also delete the state file if it exists so we start completely fresh
+    state_file = CONFIG_DIR / "state.json"
+    if state_file.exists():
+        state_file.unlink()
 
 
 def load_config() -> dict:
