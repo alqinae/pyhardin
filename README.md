@@ -1,3 +1,7 @@
+<div align="center">
+  <img src="assets/logo.png" alt="Hardin Pilot Logo" width="600" />
+</div>
+
 # Hardin Pilot
 
 > **AI-Powered Linux Security Configuration Auditor**
