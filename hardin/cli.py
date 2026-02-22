@@ -271,9 +271,10 @@ def _run_scan(extra_paths: list[str] | None = None, resume: bool = True) -> None
     if remediation_script:
         console.print()
         console.print(Panel(
-            f"[bold yellow]Copy and paste the following command to fix all issues[/bold yellow] (or run `hardin --apply`):\n\n"
-            f"[white]{remediation_script}[/white]",
-            title="[bold red]⚡ Auto-Remediation Command[/bold red]",
+            "[bold yellow]Security issues were found during the scan.[/bold yellow]\n\n"
+            "Review the detailed PDF report for more information. To automatically apply all AI-recommended fixes safely, run:\n\n"
+            "    [bold cyan]hardin --apply[/bold cyan]",
+            title="[bold red]⚡ Auto-Remediation Ready[/bold red]",
             border_style="red",
             padding=(1, 2),
         ))
