@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hardin - Security Auditor</title>
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <!-- HTMX -->
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                },
+            },
+        }
+    </script>
+</head>
+
+<body class="bg-gray-100 min-h-screen font-sans text-gray-800">
+
+    <div class="max-w-5xl mx-auto pt-10 px-4">
+        <!-- Header -->
+        <header class="flex flex-col items-center mb-10">
+            <h1 class="text-5xl font-extrabold text-red-600 mb-2 font-mono flex items-center gap-4">
+                <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                    xmlns="http://www.w3.org/2000/svg">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z">
+                    </path>
+                </svg>
+                HARDIN PILOT
+            </h1>
+            <p class="text-gray-500">AI-Powered Linux Security Configuration Auditor</p>
+        </header>
+
+        <!-- Main Card -->
+        <main class="bg-white rounded-xl shadow-lg p-8 border border-gray-200">
+
+            {% if not has_api_key %}
+            <div class="bg-orange-100 border-l-4 border-orange-500 text-orange-700 p-4 mb-6" role="alert">
+                <p class="font-bold">API Key Missing</p>
+                <p>You must configure your API key below or via the CLI before running a scan.</p>
+            </div>
+            {% endif %}
+
+            <!-- Settings Form -->
+            <div class="mb-8 p-6 bg-gray-50 rounded-xl border border-gray-200 shadow-sm">
+                <h3 class="text-xl font-bold mb-4 text-gray-800">Configuration Settings</h3>
+                <div id="settings-status"></div>
+                <form id="settings-form" hx-post="/settings" hx-target="#settings-status" class="space-y-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">AI Provider</label>
+                            <select name="provider" id="provider-select" onchange="updateModelOptions()" required
+                                class="w-full border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-blue-500 py-2 px-3">
+                                <option value="" disabled {% if not current_provider %}selected{% endif %}>Select AI
+                                    Provider...</option>
+                                <option value="gemini" {% if current_provider=='gemini' %}selected{% endif %}>Google
+                                    Gemini</option>
+                                <option value="openai" {% if current_provider=='openai' %}selected{% endif %}>OpenAI (or
+                                    Local)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Model Name</label>
+                            <input type="text" name="model" id="model-input"
+                                list="model-options-{% if current_provider == 'openai' %}openai{% else %}gemini{% endif %}"
+                                value="{% if current_provider %}{{ current_model }}{% endif %}"
+                                class="w-full border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-blue-500 py-2 px-3 disabled:bg-gray-100 disabled:text-gray-500"
+                                placeholder="{% if current_provider == 'openai' %}e.g. gpt-4o{% else %}e.g. gemini-2.5-flash{% endif %}"
+                                autocomplete="off" {% if not current_provider %}disabled{% endif %} required>
+                            <datalist id="model-options-gemini">
+                                <!-- Gemini Models -->
+                                <option value="gemini-3.1-pro"></option>
+                                <option value="gemini-3.1-flash"></option>
+                                <option value="gemini-2.5-pro"></option>
+                                <option value="gemini-2.5-flash"></option>
+                                <option value="gemini-2.0-pro-exp"></option>
+                                <option value="gemini-2.0-flash"></option>
+                                <option value="gemini-2.0-flash-thinking-exp"></option>
+                                <option value="gemini-1.5-pro"></option>
+                                <option value="gemini-1.5-flash"></option>
+                            </datalist>
+                            <datalist id="model-options-openai">
+                                <!-- OpenAI Models -->
+                                <option value="gpt-5"></option>
+                                <option value="gpt-4.5-preview"></option>
+                                <option value="gpt-4o"></option>
+                                <option value="gpt-4o-mini"></option>
+                                <option value="o3-mini"></option>
+                                <option value="o1"></option>
+                                <option value="o1-mini"></option>
+                                <option value="gpt-4-turbo"></option>
+                                <option value="gpt-4"></option>
+                            </datalist>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">API Key</label>
+                            <div class="relative">
+                                <input type="password" id="api-key-input" name="api_key" value="{{ current_api_key }}"
+                                    class="w-full border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-blue-500 py-2 pl-3 pr-10"
+                                    placeholder="Enter your API key">
+                                <button type="button" onclick="toggleApiKey()"
+                                    class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 focus:outline-none">
+                                    <svg id="api-key-icon-show" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                                        stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                    </svg>
+                                    <svg id="api-key-icon-hide" class="h-5 w-5 hidden" fill="none" viewBox="0 0 24 24"
+                                        stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                        <div id="base-url-container" class="{% if current_provider != 'openai' %}hidden{% endif %}">
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Base URL (Local API
+                                Override)</label>
+                            <input type="url" name="api_base" id="api-base-input" value="{{ current_api_base }}"
+                                class="w-full border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-blue-500 py-2 px-3"
+                                placeholder="e.g. http://localhost:1234/v1">
+                        </div>
+                    </div>
+                    <button type="submit"
+                        class="bg-gray-800 hover:bg-gray-900 text-white px-4 py-2 rounded-lg font-semibold transition-colors shadow-sm">
+                        Save Settings
+                    </button>
+                </form>
+            </div>
+
+            <div class="flex justify-between items-center border-b pb-4 mb-6">
+                <h2 class="text-3xl font-bold text-gray-800">System Dashboard</h2>
+                <div class="flex gap-2">
+                    <button onclick="expandAllScans()"
+                        class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors shadow-sm flex items-center gap-1">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                            xmlns="http://www.w3.org/2000/svg">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7">
+                            </path>
+                        </svg>
+                        Expand All
+                    </button>
+                    <button onclick="collapseAllScans()"
+                        class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors shadow-sm flex items-center gap-1">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                            xmlns="http://www.w3.org/2000/svg">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7">
+                            </path>
+                        </svg>
+                        Collapse All
+                    </button>
+                    <button hx-post="/clear-state" hx-target="#scan-results" hx-swap="innerHTML"
+                        hx-confirm="Are you sure you want to delete all scan history?"
+                        class="bg-red-100 hover:bg-red-200 text-red-700 px-4 py-2 rounded-lg font-semibold transition-colors shadow-sm">
+                        Clear History
+                    </button>
+                    <button id="run-scan-btn" hx-post="/scan" hx-target="#scan-status" hx-include="#settings-form" {% if
+                        not has_api_key or scan_in_progress %}disabled
+                        class="bg-gray-400 text-white px-6 py-2 rounded-lg font-semibold cursor-not-allowed" {% else
+                        %}class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-semibold transition-colors shadow-sm"
+                        {% endif %}>
+                        Run Security Scan
+                    </button>
+                </div>
+            </div>
+
+            <!-- Status Container -->
+            <div id="scan-status" class="mb-8">
+                {% if scan_in_progress %}
+                <div hx-get="/status" hx-trigger="load" hx-swap="outerHTML">
+                    Loading status...
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Results Container -->
+            <div id="scan-results">
+                {% if states %}
+                {% for state in states|reverse %}
+                {% set has_errors = state.results | selectattr("status", "equalto", "failed") | list | length > 0 %}
+                <details
+                    class="scan-details mb-6 rounded-xl shadow-sm border group transition-colors overflow-hidden
+                    {% if has_errors %}bg-red-50 border-red-300{% elif state.is_complete %}bg-green-50 border-green-300{% else %}bg-yellow-50 border-yellow-300{% endif %}">
+                    <summary
+                        class="px-6 py-4 text-lg font-bold cursor-pointer select-none border-b flex justify-between items-center transition-colors list-none [&::-webkit-details-marker]:hidden rounded-t-xl
+                        {% if has_errors %}text-red-900 border-red-200 bg-red-100{% elif state.is_complete %}text-green-900 border-green-200 bg-green-100{% else %}text-yellow-900 border-yellow-200 bg-yellow-100{% endif %}">
+                        <div class="flex items-center gap-4">
+                            <svg class="w-6 h-6 transition-transform duration-200 group-open:rotate-90 {% if has_errors %}text-red-400{% elif state.is_complete %}text-green-400{% else %}text-yellow-400{% endif %}"
+                                fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                                xmlns="http://www.w3.org/2000/svg">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7">
+                                </path>
+                            </svg>
+                            <div class="flex items-center gap-3">
+                                <span class="tracking-tight">Scan</span>
+                                <span
+                                    class="font-mono bg-white/80 backdrop-blur-sm px-3 py-1 rounded-md text-sm border border-gray-200 text-gray-800 shadow-sm">{{
+                                    state.scan_id }}</span>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-6">
+                            {% if has_errors %}
+                            <span
+                                class="text-[11px] font-black uppercase tracking-widest py-1.5 px-3 bg-red-600 text-white rounded-md shadow-sm">Error</span>
+                            {% elif state.is_complete %}
+                            <span
+                                class="text-[11px] font-black uppercase tracking-widest py-1.5 px-3 bg-green-600 text-white rounded-md shadow-sm">Complete</span>
+                            {% else %}
+                            <span
+                                class="text-[11px] font-black uppercase tracking-widest py-1.5 px-3 bg-yellow-500 text-white rounded-md shadow-sm">Running</span>
+                            {% endif %}
+                            <span class="text-xs font-mono opacity-60 tracking-tighter">{% if state.scan_date %}{{
+                                state.scan_date }}{% else %}Legacy Scan{% endif %}</span>
+                            <button hx-delete="/scan/{{ state.scan_id }}"
+                                hx-confirm="Are you sure you want to delete this scan?"
+                                hx-target="closest .scan-details" hx-swap="outerHTML" onclick="event.stopPropagation()"
+                                class="text-gray-400 hover:text-red-600 transition-colors tooltip" title="Delete Scan">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                                    xmlns="http://www.w3.org/2000/svg">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16">
+                                    </path>
+                                </svg>
+                            </button>
+                        </div>
+                    </summary>
+                    <div class="p-6">
+                        {% include "partials/results.html" %}
+                    </div>
+                </details>
+                {% endfor %}
+                {% elif not scan_in_progress %}
+                <div class="text-center text-gray-500 py-10 border-2 border-dashed border-gray-300 rounded-lg">
+                    <p class="mb-2 text-lg">No active scan results.</p>
+                    <p class="text-sm">Click the button above to start auditing your system.</p>
+                </div>
+                {% endif %}
+            </div>
+
+        </main>
+    </div>
+
+    <script>
+        function updateModelOptions() {
+            const provider = document.getElementById('provider-select').value;
+            const modelInput = document.getElementById('model-input');
+
+            if (provider) {
+                modelInput.disabled = false;
+                modelInput.setAttribute('list', 'model-options-' + provider);
+                modelInput.value = '';
+                modelInput.placeholder = provider === 'openai' ? 'e.g. gpt-4o' : 'e.g. gemini-2.5-flash';
+                modelInput.focus();
+
+                if (provider === 'openai') {
+                    document.getElementById('base-url-container').classList.remove('hidden');
+                } else {
+                    document.getElementById('base-url-container').classList.add('hidden');
+                }
+            } else {
+                modelInput.disabled = true;
+                modelInput.value = '';
+                modelInput.placeholder = 'Select a provider first';
+                document.getElementById('base-url-container').classList.add('hidden');
+            }
+        }
+
+        function toggleApiKey() {
+            const input = document.getElementById('api-key-input');
+            const iconShow = document.getElementById('api-key-icon-show');
+            const iconHide = document.getElementById('api-key-icon-hide');
+            if (input.type === 'password') {
+                input.type = 'text';
+                iconShow.classList.add('hidden');
+                iconHide.classList.remove('hidden');
+            } else {
+                input.type = 'password';
+                iconShow.classList.remove('hidden');
+                iconHide.classList.add('hidden');
+            }
+        }
+
+        function expandAllScans() {
+            const details = document.querySelectorAll('details.scan-details');
+            details.forEach(d => { d.open = true; });
+        }
+
+        function collapseAllScans() {
+            const details = document.querySelectorAll('details.scan-details');
+            details.forEach(d => { d.open = false; });
+        }
+    </script>
+</body>
+
+</html>

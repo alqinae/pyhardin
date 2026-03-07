@@ -25,7 +25,8 @@ Hardin Pilot is a robust, automated CLI tool that scans your Linux system for co
 
 - **Massive Discovery Scanner**: Automatically detects configuration files for 55+ standard Linux services (SSH, Nginx, Apache, MySQL, Docker, Kubernetes, etc.) and gracefully handles custom `conf.d` structures.
 - **Provider-Agnostic Deep AI Analysis**: Supports **Google Gemini** (free-tier out of the box), **OpenAI** (ChatGPT), or **Local / Custom APIs** (LMStudio, Ollama, DeepSeek, Groq). Hardin utilizes deep "thinking" cognitive layers (where available) to reason through complex misconfigurations.
-- **Auto-Remediation Workflow**: Doesn't just find problems. Hardin generates exact, safe terminal commands (`sed`, etc.) to instantly fix all discovered vulnerabilities. It saves these to `~/.hardin/last_remediation.sh` so you can review your PDF first and independently execute the fixes later with `hardin --apply`.
+- **Auto-Remediation Workflow**: Doesn't just find problems. Hardin generates exact, safe terminal commands (`sed`, etc.) to instantly fix all discovered vulnerabilities. It saves these to `~/.hardin/last_remediation.sh` so you can review your PDF first and independently execute the fixes later with `pyhardin --apply`.
+- **FastAPI + HTMX Dashboard**: Prefer a GUI over the terminal? Pyhardin includes a blazing-fast, lightweight web dashboard. Run `pyhardin --gui` to review findings, tweak API settings, view prompts in structured tables, and download PDFs straight from your browser.
 - **Beautiful PDF Reporting**: Compiles service-by-service findings into a clean, merged, professional PDF document for compliance and review.
 - **Stateful Crash Recovery**: Network interrupted? Rate-limited? Hardin tracks progress. Just re-run the tool and it picks up exactly where it left off.
 - **Rich Interactive CLI**: Beautiful terminal output with progress bars, severity color-coding, and an interactive first-time setup wizard.
@@ -34,10 +35,11 @@ Hardin Pilot is a robust, automated CLI tool that scans your Linux system for co
 
 ## 🛠️ Tech Stack
 
-- **Language**: Python 3.10+
+- **Core Language**: Python 3.10+
 - **AI Integration**: `google-genai` and `openai` SDKs
 - **Reporting Generator**: `reportlab` & `PyPDF2`
 - **CLI Framework**: `rich`, `rich.prompt`, & standard `argparse`
+- **Web Dashboard**: `fastapi`, `htmx`, `tailwind-css`, `jinja2`, and `aiofiles`
 
 ---
 
@@ -51,9 +53,53 @@ Hardin Pilot is a robust, automated CLI tool that scans your Linux system for co
 
 ## 🚀 Getting Started
 
-### 1. The Automated Installer (Recommended)
+### 1. PyPI (Recommended)
 
-The absolute fastest way to get Hardin running is to use the included installation script. This script automatically updates package lists, ensures `python3-venv` is present, creates an isolated environment, and installs the tool globally on your path.
+Hardin is available on the official Python Package Index. You can install the core lightweight CLI locally via `pip` or `pipx`:
+
+```bash
+# Core CLI only (Ultra-lightweight)
+pip install pyhardin
+
+# CLI + Web GUI Dashboard
+pip install "pyhardin[gui]"
+```
+
+### 2. Alternative Package Managers
+
+If you prefer to isolate Pyhardin in its own environment, you can use any of the popular package managers:
+
+#### Using `pip` and `venv`
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install pyhardin
+```
+
+#### Using `uv`
+```bash
+uv venv
+source .venv/bin/activate
+uv pip install pyhardin
+```
+
+#### Using `pipenv`
+```bash
+pipenv install pyhardin
+pipenv shell
+pyhardin
+```
+
+#### Using `conda`
+```bash
+conda create -n hardin-env python=3.10
+conda activate hardin-env
+pip install pyhardin
+```
+
+### 3. The Automated Installer (From Source)
+
+The absolute fastest way to get Hardin running from source is to use the included installation script. This script automatically updates package lists, ensures `python3-venv` is present, creates an isolated environment, and installs the tool globally on your path.
 
 ```bash
 # Clone the repository
@@ -64,20 +110,18 @@ cd hardin-pilot
 chmod +x install.sh
 sudo ./install.sh
 
-# Launch Hardin
-hardin
+# Run from anywhere!
+pyhardin
 ```
 
-### 2. Manual Installation
+### 4. Manual Installation (Development)
 
-If you prefer to manage the virtual environment yourself:
+If you prefer to manage the source code yourself:
 
 ```bash
 # Clone and enter directory
 git clone https://github.com/0xMesh-X/hardin-pilot.git
 cd hardin-pilot
-
-# Setup your virtual environment
 python3 -m venv .venv
 source .venv/bin/activate
 
@@ -85,7 +129,7 @@ source .venv/bin/activate
 pip install -e .
 
 # Launch Hardin
-hardin
+pyhardin
 ```
 
 ---
@@ -97,7 +141,7 @@ The first time you run `hardin`, an interactive wizard will launch to help you c
 ### The Setup Wizard
 
 ```bash
-hardin
+pyhardin
 ```
 
 The wizard will ask you to choose between:
@@ -112,13 +156,46 @@ The wizard will provide you the exact URL where you can generate the required AP
 
 | Command | Description |
 |---|---|
-| `hardin` | Runs the standard scan. Analyzes configs, generates the PDF, and securely saves the pending fixes. |
-| `hardin --apply` | Instantly executes the pending remediation script generated by your last complete scan. |
-| `hardin --list` | Scans the system and simply lists which services it found, without sending data to the AI. |
-| `hardin --no-resume` | Clears previous tracking state and forces a fresh, complete scan from scratch. |
-| `hardin --scan /path/to/extra/config` | Explicitly targets an extra directory to scan, in addition to the defaults. |
-| `hardin --set-key ""` | Explicitly overwrite the API key. |
-| `hardin --reset` | Wipes the entire local configuration (`config.json`) and state caches, forcing the interactive setup wizard to launch anew. |
+| `pyhardin` | Runs the standard CLI interactive scan. Analyzes configs locally and generates the PDF. |
+| `pyhardin --gui` | **New!** Launches the FastAPI web dashboard at `http://localhost:8000` for a rich visual experience. |
+| `pyhardin --gui --port 8080` | Launches the web dashboard on a custom port instead of the default `8000`. |
+| `pyhardin --apply` | Instantly executes the pending remediation script generated by your last complete scan. |
+| `pyhardin --show <ID> --show-prompts` | Views the detailed report (and LLM structured prompt tables) for a past scan ID. |
+| `pyhardin --delete <ID>` | Permanently deletes a specific scan report from local history. |
+| `pyhardin --list` | Scans the system and simply lists which services it found, without sending data to the AI. |
+| `pyhardin --history` | Displays a table of all your historical local CLI and GUI scans. |
+| `pyhardin --no-resume` | Clears previous tracking state and forces a fresh, complete scan from scratch. |
+| `pyhardin --resume-id <ID>` | Explicitly resumes a specific historical incomplete scan. |
+| `pyhardin --scan /path/to/extra/config` | Explicitly targets an extra directory to scan, in addition to the defaults. |
+| `pyhardin --set-key ""` | Explicitly overwrite the API key. |
+| `pyhardin --reset` | Wipes the entire local configuration (`config.json`) and state caches, forcing the interactive setup wizard to launch anew. |
+
+### Remote Dashboard Access (Cloud Providers)
+
+If you are running Pyhardin on a remote server and want to access the Web GUI (`pyhardin --gui`) from your local browser, you need to ensure **Port 8000 (TCP)** is open in both your server's local firewall and your cloud provider's network security group.
+
+#### AWS (EC2)
+1. Go to the EC2 Dashboard -> **Security Groups**.
+2. Select the Security Group attached to your instance.
+3. Click **Edit inbound rules** -> **Add rule**.
+4. Type: `Custom TCP`, Port Range: `8000`, Source: `My IP` (Recommended) or `0.0.0.0/0` (Anywhere).
+
+#### Google Cloud (GCP)
+1. Go to VPC Network -> **Firewall**.
+2. Click **Create Firewall Rule**.
+3. Name: `allow-hardin-8000`, Targets: `All instances in the network` (or specific tags), Source filter: `IPv4 ranges` -> `0.0.0.0/0`.
+4. Specified protocols and ports: Check `tcp` and type `8000`.
+
+#### Microsoft Azure
+1. Go to Virtual Machines -> Select your VM -> **Networking**.
+2. Click **Add inbound port rule**.
+3. Destination port ranges: `8000`, Protocol: `TCP`, Action: `Allow`.
+
+#### UFW / IPTables (Local Server Firewall)
+If your Linux instance is also running a local firewall (like `ufw`), you must allow the port natively in the terminal before the dashboard can receive traffic:
+```bash
+sudo ufw allow 8000/tcp
+```
 
 ---
 

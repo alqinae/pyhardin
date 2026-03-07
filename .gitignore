@@ -47,3 +47,9 @@ hardin_reports/
 # OS specific
 .DS_Store
 Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo

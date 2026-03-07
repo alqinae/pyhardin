@@ -8,9 +8,10 @@ from openai import OpenAI
 from hardin.config import get_api_base, get_api_key, get_model, get_provider
 from hardin.exceptions import AnalyzerError, APIRateLimitError
 from hardin.scanner import ServiceConfig
-from hardin.state import AnalysisResult
+from hardin.state import AnalysisResult, Finding
 
-SYSTEM_PROMPT = """You are Hardin, an expert Linux security auditor. You analyze configuration files for security misconfigurations, hardening opportunities, and best practices violations.
+SYSTEM_PROMPT = """You are Hardin, an expert Linux security auditor. You analyze configuration files
+for security misconfigurations, hardening opportunities, and best practices violations.
 
 For each configuration you analyze, you MUST respond in the following JSON format ONLY:
 {
@@ -39,11 +40,31 @@ Rules:
 - Focus on real, actionable security issues, not style preferences."""
 
 
-def _build_prompt(service: ServiceConfig) -> str:
-    parts = [f"Analyze the following configuration files for the '{service.service_name}' service:\n"]
+def build_prompt(service: ServiceConfig) -> str:
+    """Generates the exact LLM prompt for the given service config."""
+    os_info_str = ""
+    if service.os_context:
+        os_info_str = "\n".join(f"{k}: {v}" for k, v in service.os_context.items())
+    if not os_info_str:
+        os_info_str = "Unknown Linux"
+
+    parts = [
+        f"Analyze the following configuration files for the '{service.service_name}' service:\n",
+        f"Server OS Context:\n{os_info_str}\n\n",
+        "Provide your remediation_command specific to the Server OS Context "
+        "(e.g. use apt-get vs dnf where appropriate).\n"
+    ]
     for filepath, content in service.contents.items():
         parts.append(f"--- FILE: {filepath} ---")
-        parts.append(content)
+        
+        cleaned_lines = []
+        for line in content.splitlines():
+            stripped = line.strip()
+            # Skip empty lines and full-line comments
+            if stripped and not stripped.startswith('#'):
+                cleaned_lines.append(line)
+                
+        parts.append("\n".join(cleaned_lines))
         parts.append(f"--- END FILE: {filepath} ---\n")
     parts.append("Respond with the JSON format specified in your instructions.")
     return "\n".join(parts)
@@ -77,30 +98,24 @@ def _parse_response(raw: str, service_name: str) -> AnalysisResult:
         data = json.loads(json_string)
         findings_list = data.get("findings", [])
         remediation = []
-        finding_texts = []
+        parsed_findings = []
 
         for f in findings_list:
-            severity = f.get("severity", "info").upper()
-            title = f.get("title", "Unknown")
-            desc = f.get("description", "")
-            fpath = f.get("file", "")
-            current = f.get("current_value", "")
-            recommended = f.get("recommended_value", "")
-            cmd = f.get("remediation_command", "")
-
-            finding_texts.append(
-                f"[{severity}] {title}\n"
-                f"  File: {fpath}\n"
-                f"  Issue: {desc}\n"
-                f"  Current: {current}\n"
-                f"  Recommended: {recommended}\n"
+            finding = Finding(
+                title=f.get("title", "Unknown"),
+                severity=f.get("severity", "info").upper(),
+                description=f.get("description", ""),
+                file=f.get("file", ""),
+                current_value=f.get("current_value", ""),
+                recommended_value=f.get("recommended_value", ""),
+                remediation_command=f.get("remediation_command", "")
             )
-            if cmd:
-                remediation.append(cmd)
+            parsed_findings.append(finding)
+            if finding.remediation_command:
+                remediation.append(finding.remediation_command)
 
-        summary = data.get("summary", "")
-        # Add summary and all detailed finding texts
-        result.findings = summary + "\n\n" + "\n\n".join(finding_texts)
+        result.summary = data.get("summary", "")
+        result.findings = parsed_findings
         result.remediation_commands = remediation
 
     except (json.JSONDecodeError, KeyError):
@@ -109,15 +124,29 @@ def _parse_response(raw: str, service_name: str) -> AnalysisResult:
     return result
 
 
-def analyze_service(service: ServiceConfig, max_retries: int = 3) -> AnalysisResult:
+def analyze_service(
+    target: ServiceConfig | AnalysisResult, max_retries: int = 3
+) -> AnalysisResult:
     api_key = get_api_key()
     if not api_key:
-        raise AnalyzerError("No API key configured. Run 'hardin' to set up.", code="NO_API_KEY")
+        raise AnalyzerError("No API key configured. Run 'pyhardin' to set up.", code="NO_API_KEY")
 
     provider = get_provider()
     model_name = get_model()
     api_base = get_api_base()
-    prompt = _build_prompt(service)
+
+    # Extract prompt depending on what was passed
+    if isinstance(target, ServiceConfig):
+        prompt = build_prompt(target)
+        service_name = target.service_name
+    else: # target is an AnalysisResult
+        if not target.prompt:
+            raise AnalyzerError(
+                "AnalysisResult provided without a prompt string.",
+                code="MISSING_PROMPT_IN_ANALYSIS_RESULT"
+            )
+        prompt = target.prompt
+        service_name = target.service_name
 
     for attempt in range(max_retries):
         try:
@@ -131,9 +160,6 @@ def analyze_service(service: ServiceConfig, max_retries: int = 3) -> AnalysisRes
                         temperature=0.1,
                         max_output_tokens=16384,
                         response_mime_type="application/json",
-                        thinking_config=genai.types.ThinkingConfig(
-                            thinking_budget=8192,
-                        ),
                     ),
                 )
                 raw_text = gemini_response.text if gemini_response.text else ""
@@ -151,30 +177,46 @@ def analyze_service(service: ServiceConfig, max_retries: int = 3) -> AnalysisRes
                     ],
                     temperature=0.1,
                 )
-                raw_text = openai_response.choices[0].message.content if openai_response.choices and openai_response.choices[0].message.content else ""
+                raw_text = (
+                    openai_response.choices[0].message.content
+                    if openai_response.choices and openai_response.choices[0].message.content
+                    else ""
+                )
             else:
                 raise AnalyzerError(f"Unknown provider: {provider}", code="INVALID_PROVIDER")
 
-            return _parse_response(raw_text, service.service_name)
+            result = _parse_response(raw_text, service_name)
+            result.prompt = prompt
+            result.provider = provider
+            result.model = model_name
+            result.temperature = 0.1
+            result.max_tokens = 16384 if provider == "gemini" else 4096 # Default estimation for OpenAI if not set
+            return result
 
         except Exception as e:
-            error_str = str(e).lower()
-            if "rate" in error_str or "429" in error_str or "quota" in error_str:
-                wait_time = (2 ** attempt) * 30
+            error_str = str(e)
+            error_lower = error_str.lower()
+            
+            # Fail fast for permanent quota/balance issues
+            if "insufficient_quota" in error_lower or "insufficient balance" in error_lower or "exceeded your current quota" in error_lower:
+                raise APIRateLimitError(message=error_str, retry_after=0) from e
+
+            if "rate" in error_lower or "429" in error_lower or "quota" in error_lower:
+                wait_time = (2 ** attempt) * 10 # Reduced from 30 to 10 for better GUI responsiveness
                 if attempt < max_retries - 1:
                     time.sleep(wait_time)
                     continue
-                raise APIRateLimitError(retry_after=wait_time) from e
+                raise APIRateLimitError(message=error_str, retry_after=wait_time) from e
             if attempt < max_retries - 1:
                 time.sleep(2 ** attempt)
                 continue
             raise AnalyzerError(
-                f"Failed to analyze {service.service_name}: {e}",
+                f"Failed to analyze {service_name}: {e}",
                 code="ANALYSIS_FAIL",
-                details={"service": service.service_name},
+                details={"service": service_name},
             ) from e
 
     raise AnalyzerError(
-        f"Exhausted retries for {service.service_name}",
+        f"Exhausted retries for {service_name}",
         code="MAX_RETRIES",
     )

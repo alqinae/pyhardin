@@ -1,5 +1,6 @@
 import json
-from dataclasses import asdict, dataclass, field
+
+from pydantic import BaseModel, Field
 
 from hardin.config import CONFIG_DIR
 from hardin.exceptions import StateError
@@ -7,61 +8,83 @@ from hardin.exceptions import StateError
 STATE_FILE = CONFIG_DIR / "state.json"
 
 
-@dataclass
-class AnalysisResult:
+class Finding(BaseModel):
+    title: str = ""
+    severity: str = "info"
+    description: str = ""
+    file: str = ""
+    current_value: str = ""
+    recommended_value: str = ""
+    remediation_command: str = ""
+
+
+class AnalysisResult(BaseModel):
     service_name: str
-    findings: str = ""
-    remediation_commands: list[str] = field(default_factory=list)
+    findings: str | list[Finding] = Field(default_factory=list)
+    summary: str = ""
+    remediation_commands: list[str] = Field(default_factory=list)
     status: str = "pending"
+    prompt: str = ""
+    provider: str = ""
+    model: str = ""
+    temperature: float = 0.1
+    max_tokens: int = 16384
+    remediation_applied: bool = False
 
 
-@dataclass
-class ScanState:
+class ScanState(BaseModel):
     scan_id: str = ""
-    completed_services: list[str] = field(default_factory=list)
-    results: list[AnalysisResult] = field(default_factory=list)
+    scan_date: str = ""
+    completed_services: list[str] = Field(default_factory=list)
+    results: list[AnalysisResult] = Field(default_factory=list)
     total_services: int = 0
     is_complete: bool = False
 
 
-def load_state() -> ScanState | None:
+def load_all_states() -> list[ScanState]:
     try:
         if not STATE_FILE.exists() or STATE_FILE.stat().st_size == 0:
-            return None
+            return []
         with open(STATE_FILE, "r") as f:
             data = json.load(f)
-        state = ScanState(
-            scan_id=data.get("scan_id", ""),
-            completed_services=data.get("completed_services", []),
-            total_services=data.get("total_services", 0),
-            is_complete=data.get("is_complete", False),
-        )
-        for r in data.get("results", []):
-            state.results.append(AnalysisResult(
-                service_name=r.get("service_name", ""),
-                findings=r.get("findings", ""),
-                remediation_commands=r.get("remediation_commands", []),
-                status=r.get("status", "pending"),
-            ))
-        return state
+        if isinstance(data, dict):
+            return [ScanState.model_validate(data)]
+        return [ScanState.model_validate(item) for item in data]
     except (json.JSONDecodeError, OSError):
-        return None
+        return []
+
+
+def load_latest_state() -> ScanState | None:
+    states = load_all_states()
+    return states[-1] if states else None
+
+
+def save_all_states(states: list[ScanState]) -> None:
+    try:
+        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        with open(STATE_FILE, "w") as f:
+            json.dump([s.model_dump() for s in states], f, indent=2)
+    except OSError as e:
+        raise StateError(f"Cannot save states: {e}", code="STATE_WRITE_FAIL") from e
 
 
 def save_state(state: ScanState) -> None:
-    try:
-        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-        data = {
-            "scan_id": state.scan_id,
-            "completed_services": state.completed_services,
-            "total_services": state.total_services,
-            "is_complete": state.is_complete,
-            "results": [asdict(r) for r in state.results],
-        }
-        with open(STATE_FILE, "w") as f:
-            json.dump(data, f, indent=2)
-    except OSError as e:
-        raise StateError(f"Cannot save state: {e}", code="STATE_WRITE_FAIL") from e
+    states = load_all_states()
+    existing_idx = next((i for i, s in enumerate(states) if s.scan_id == state.scan_id), None)
+    if existing_idx is not None:
+        states[existing_idx] = state
+    else:
+        states.append(state)
+    save_all_states(states)
+
+
+def delete_state(scan_id: str) -> bool:
+    states = load_all_states()
+    new_states = [s for s in states if s.scan_id != scan_id]
+    if len(new_states) < len(states):
+        save_all_states(new_states)
+        return True
+    return False
 
 
 def clear_state() -> None:

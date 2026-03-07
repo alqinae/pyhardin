@@ -1,24 +1,57 @@
 [project]
-name = "hardin"
-version = "1.0.0"
+name = "pyhardin"
+version = "2.0.0"
+authors = [
+  { name="Meshari Faisal Alluhaybi", email="meshari.alluhaybi1@gmail.com" },
+]
 description = "AI-powered Linux security configuration auditor"
 readme = "README.md"
-license = {text = "MIT"}
+license = "MIT"
 requires-python = ">=3.10"
+keywords = ["security", "linux", "audit", "ai", "llm", "configuration"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Environment :: Web Environment",
+    "Intended Audience :: System Administrators",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Security",
+]
 dependencies = [
     "google-genai>=1.0.0",
     "openai>=1.0.0",
     "reportlab>=4.0",
     "PyPDF2>=3.0",
     "rich>=13.0",
+    "pydantic>=2.0",
+    "certifi>=2024.0.0"
+]
+
+[project.optional-dependencies]
+gui = [
+    "fastapi>=0.110.0",
+    "uvicorn>=0.27.0",
+    "jinja2>=3.0",
+    "python-multipart",
+    "aiofiles>=23.2.1"
 ]
 
 [project.scripts]
-hardin = "hardin.cli:main"
+pyhardin = "hardin.cli:main"
 
 [build-system]
 requires = ["setuptools>=68.0"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["hardin", "hardin.*"]
+
+[tool.setuptools.package-data]
+hardin = ["templates/*.html", "templates/partials/*.html"]
 
 [tool.ruff]
 line-length = 100
