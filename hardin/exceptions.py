@@ -22,8 +22,8 @@ class AnalyzerError(HardinError):
 
 
 class APIRateLimitError(AnalyzerError):
-    def __init__(self, message: str = "API rate limit exceeded", retry_after: int = 60):
-        super().__init__(message, code="RATE_LIMIT")
+    def __init__(self, message: str = "API rate limit exceeded", retry_after: int = 60, details: dict | None = None):
+        super().__init__(message, code="RATE_LIMIT", details=details)
         self.retry_after = retry_after
 
 

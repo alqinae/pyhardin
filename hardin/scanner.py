@@ -1,10 +1,15 @@
-from dataclasses import dataclass, field
 from pathlib import Path
+
+from pydantic import BaseModel, Field
 
 KNOWN_SERVICE_PATHS: dict[str, list[str]] = {
     "ssh": ["/etc/ssh/sshd_config", "/etc/ssh/ssh_config"],
     "nginx": ["/etc/nginx/nginx.conf", "/etc/nginx/sites-enabled/", "/etc/nginx/conf.d/"],
-    "apache2": ["/etc/apache2/apache2.conf", "/etc/apache2/sites-enabled/", "/etc/apache2/conf-enabled/"],
+    "apache2": [
+        "/etc/apache2/apache2.conf",
+        "/etc/apache2/sites-enabled/",
+        "/etc/apache2/conf-enabled/",
+    ],
     "mysql": ["/etc/mysql/my.cnf", "/etc/mysql/mysql.conf.d/", "/etc/mysql/conf.d/"],
     "mariadb": ["/etc/mysql/mariadb.conf.d/"],
     "postgresql": ["/etc/postgresql/"],
@@ -61,11 +66,45 @@ CONFIG_EXTENSIONS = {
 }
 
 
-@dataclass
-class ServiceConfig:
+class ServiceConfig(BaseModel):
     service_name: str
-    files: list[str] = field(default_factory=list)
-    contents: dict[str, str] = field(default_factory=dict)
+    files: list[str] = Field(default_factory=list)
+    contents: dict[str, str] = Field(default_factory=dict)
+    os_context: dict[str, str] = Field(default_factory=dict)
+
+
+def detect_linux_distro() -> dict[str, str]:
+    """Parse /etc/os-release to identify the Linux distribution."""
+    os_info = {}
+    try:
+        p = Path("/etc/os-release")
+        if p.exists() and p.is_file():
+            content = p.read_text(errors="replace")
+            for line in content.splitlines():
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if "=" in line:
+                    key, val = line.split("=", 1)
+                    val = val.strip('"').strip("'")
+                    os_info[key] = val
+    except (PermissionError, OSError):
+        pass
+
+    # Fallback for older systems like CentOS 6 or very obscure distros
+    if not os_info:
+        try:
+            if Path("/etc/redhat-release").exists():
+                os_info["ID"] = "rhel"
+                os_info["PRETTY_NAME"] = Path("/etc/redhat-release").read_text().strip()
+            elif Path("/etc/debian_version").exists():
+                os_info["ID"] = "debian"
+                deb_ver = Path('/etc/debian_version').read_text().strip()
+                os_info["PRETTY_NAME"] = f"Debian GNU/Linux {deb_ver}"
+        except (PermissionError, OSError):
+            pass
+
+    return os_info
 
 
 def _read_file_safe(path: str) -> str | None:
@@ -94,8 +133,9 @@ def _scan_directory(dir_path: str) -> list[str]:
 
 def scan_known_services() -> list[ServiceConfig]:
     results = []
+    os_context = detect_linux_distro()
     for service_name, paths in KNOWN_SERVICE_PATHS.items():
-        svc = ServiceConfig(service_name=service_name)
+        svc = ServiceConfig(service_name=service_name, os_context=os_context)
         for path in paths:
             p = Path(path)
             if p.is_dir():
@@ -126,7 +166,8 @@ def scan_additional_configs(extra_paths: list[str] | None = None) -> list[Servic
             if Path(p).is_file():
                 known_files.add(p)
 
-    misc = ServiceConfig(service_name="miscellaneous")
+    os_context = detect_linux_distro()
+    misc = ServiceConfig(service_name="miscellaneous", os_context=os_context)
     for search_dir in search_dirs:
         for fpath in _scan_directory(search_dir):
             if fpath not in known_files:

@@ -14,6 +14,7 @@ from reportlab.platypus import (
     Spacer,
 )
 
+from hardin import __version__
 from hardin.config import get_output_dir
 from hardin.exceptions import ReporterError
 from hardin.state import AnalysisResult
@@ -107,21 +108,42 @@ def generate_service_pdf(result: AnalysisResult, output_dir: Path) -> Path:
     story.append(Spacer(1, 12))
 
     if result.findings:
-        for line in result.findings.strip().split("\n"):
-            line = line.strip()
-            if not line:
-                story.append(Spacer(1, 6))
-                continue
-            if line.startswith("["):
-                color = _severity_color(line)
+        if isinstance(result.findings, list):
+            for f in result.findings:
+                sev = getattr(f, "severity", "INFO").upper()
+                title = getattr(f, "title", "Unknown")
+                desc = getattr(f, "description", "")
+                color = _severity_color(sev)
+                
                 story.append(Paragraph(
-                    f'<font color="{color.hexval()}">{_escape(line)}</font>',
+                    f'<font color="{color.hexval()}"><b>[{sev}] {_escape(title)}</b></font>',
                     styles["HardinBody"],
                 ))
-            elif line.startswith("  "):
-                story.append(Paragraph(_escape(line), styles["HardinCode"]))
-            else:
-                story.append(Paragraph(_escape(line), styles["HardinBody"]))
+                if desc:
+                    story.append(Paragraph(_escape(desc), styles["HardinBody"]))
+                if getattr(f, "file", ""):
+                    story.append(Paragraph(f"<b>File:</b> {_escape(f.file)}", styles["HardinBody"]))
+                if getattr(f, "current_value", ""):
+                    story.append(Paragraph(f"<b>Current:</b> {_escape(f.current_value)}", styles["HardinBody"]))
+                if getattr(f, "recommended_value", ""):
+                    story.append(Paragraph(f"<b>Recommended:</b> {_escape(f.recommended_value)}", styles["HardinBody"]))
+                story.append(Spacer(1, 10))
+        else:
+            for line in result.findings.strip().split("\n"):
+                line = line.strip()
+                if not line:
+                    story.append(Spacer(1, 6))
+                    continue
+                if line.startswith("["):
+                    color = _severity_color(line)
+                    story.append(Paragraph(
+                        f'<font color="{color.hexval()}">{_escape(line)}</font>',
+                        styles["HardinBody"],
+                    ))
+                elif line.startswith("  "):
+                    story.append(Paragraph(_escape(line), styles["HardinCode"]))
+                else:
+                    story.append(Paragraph(_escape(line), styles["HardinBody"]))
     else:
         story.append(Paragraph("No findings for this service.", styles["HardinBody"]))
 
@@ -173,15 +195,15 @@ def _generate_cover_page(output_dir: Path) -> Path:
 
     story = []
     story.append(Spacer(1, 2 * inch))
-    story.append(Paragraph("HARDIN PILOT", styles["HardinTitle"]))
+    story.append(Paragraph("PYHARDIN", styles["HardinTitle"]))
     story.append(Paragraph("Security Configuration Audit Report", styles["HardinH2"]))
-    story.append(Spacer(1, 0.5 * inch))
+    story.append(Spacer(1, 20))
     story.append(HRFlowable(width="60%", thickness=3, color=BRAND_RED))
     story.append(Spacer(1, 0.5 * inch))
 
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     story.append(Paragraph(f"Generated: {now}", styles["HardinBody"]))
-    story.append(Paragraph("Tool: Hardin Pilot v1.0.0", styles["HardinBody"]))
+    story.append(Paragraph(f"Tool: Pyhardin v{__version__}", styles["HardinBody"]))
 
     doc.build(story)
     return filename

@@ -2,7 +2,7 @@
 set -e
 
 echo "==================================================="
-echo "   Hardin Pilot - Automated Setup Script       "
+echo "   Pyhardin - Automated Setup Script             "
 echo "==================================================="
 echo ""
 
@@ -27,7 +27,7 @@ apt-get install -y python3-venv python3-pip
 echo "[*] Setting up Python virtual environment..."
 # Drop privileges to the user running sudo for venv creation if possible
 USER_HOME=$(eval echo ~${SUDO_USER:-$USER})
-VENV_DIR="$USER_HOME/.hardin_venv"
+VENV_DIR="$USER_HOME/.pyhardin_venv"
 
 if [ ! -d "$VENV_DIR" ]; then
     python3 -m venv "$VENV_DIR"
@@ -36,22 +36,22 @@ else
     echo "[+] Virtual environment already exists at $VENV_DIR"
 fi
 
-echo "[*] Installing Hardin Pilot dependencies..."
+echo "[*] Installing Pyhardin dependencies..."
 # We install the tool globally into the new venv
 "$VENV_DIR/bin/pip" install --upgrade pip
 "$VENV_DIR/bin/pip" install -e .
 
-echo "[*] Creating global symlink for 'hardin' command..."
+echo "[*] Creating global symlink for 'pyhardin' command..."
 # Link the executable into /usr/local/bin to make it available system-wide
-ln -sf "$VENV_DIR/bin/hardin" /usr/local/bin/hardin
+ln -sf "$VENV_DIR/bin/pyhardin" /usr/local/bin/pyhardin
 
 echo ""
 echo "==================================================="
-echo " [SUCCESS] Hardin Pilot is now installed!          "
+echo " [SUCCESS] Pyhardin is now installed!              "
 echo "==================================================="
 echo ""
 echo " You can now run the tool from anywhere by typing:"
-echo "   sudo hardin"
+echo "   sudo pyhardin"
 echo ""
 echo " Note: We recommend running it with sudo so it can "
 echo " read protected configuration files (like /etc/shadow)"
